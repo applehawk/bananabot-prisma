@@ -1,0 +1,31 @@
+{
+  "name": "@bananabot/prisma",
+  "version": "1.0.0",
+  "description": "Shared Prisma schema and client for BananaBot projects",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "studio": "prisma studio",
+    "db:push": "prisma db push",
+    "db:seed": "ts-node seed.ts"
+  },
+  "keywords": [
+    "prisma",
+    "bananabot",
+    "database"
+  ],
+  "author": "BananaBot Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prisma": "^6.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0"
+  }
+}
