@@ -177,12 +177,14 @@ model CreditPackage {
 
 model AdminUser {
   id         String   @id @default(cuid())
-  telegramId BigInt   @unique
-  username   String?
+  telegramId BigInt?  @unique
+  username   String?  @unique
+  password   String?
   role       String   @default("ADMIN")
   createdAt  DateTime @default(now())
 
   @@index([telegramId])
+  @@index([username])
 }
 
 model Analytics {
