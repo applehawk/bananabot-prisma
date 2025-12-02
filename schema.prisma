@@ -36,24 +36,53 @@ model User {
 }
 
 model UserSettings {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  aspectRatio       String   @default("1:1")
-  numberOfImages    Int      @default(1)
-  safetyLevel       String   @default("BLOCK_MEDIUM_AND_ABOVE")
-  language          String   @default("en")
-  hdQuality         Boolean  @default(false)
-  autoEnhance       Boolean  @default(true)
-  useNegativePrompt Boolean  @default(true)
-  notifyOnComplete  Boolean  @default(true)
-  notifyOnBonus     Boolean  @default(true)
-  geminiModel       String   @default("gemini-2.5-flash-image")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String            @id @default(cuid())
+  userId            String            @unique
+  aspectRatio       String            @default("1:1")
+  numberOfImages    Int               @default(1)
+  safetyLevel       String            @default("BLOCK_MEDIUM_AND_ABOVE")
+  language          String            @default("en")
+  hdQuality         Boolean           @default(false)
+  autoEnhance       Boolean           @default(true)
+  useNegativePrompt Boolean           @default(true)
+  notifyOnComplete  Boolean           @default(true)
+  notifyOnBonus     Boolean           @default(true)
+  geminiModelId     String            @default("gemini-2.5-flash-image")
+  geminiModel       GeminiModelTariff @relation(fields: [geminiModelId], references: [modelId])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
+
+// ... existing models ...
+
+model GeminiModelTariff {
+  id            String         @id @default(cuid())
+  modelId       String         @unique // e.g. 'gemini-2.5-flash-image'
+  name          String         // e.g. 'Gemini 2.5 Flash Image 🍌'
+  inputPrice    Float          // USD per 1M tokens
+  outputPrice   Float          // USD per 1M tokens (text and thinking)
+  outputImagePrice  Float    // USD per 1M tokens (image generation)
+  imageTokens1K Int            // Tokens required for 1K/2K image generation
+  imageTokens4K Int            // Tokens required for 4K image generation
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  userSettings UserSettings[]
+
+  @@index([modelId])
+}
+
+model SystemSettings {
+  id          String   @id @default("singleton")
+  key         String   @unique
+  usdRubRate  Float    @default(100)
+  hostingCost Float    @default(0)
+  updatedAt   DateTime @updatedAt
+}
+
 
 model Generation {
   id             String           @id @default(cuid())
@@ -275,25 +304,3 @@ enum TransactionStatus {
   CANCELLED
 }
 
-model GeminiModelTariff {
-  id           String   @id @default(cuid())
-  modelId      String   @unique
-  name         String
-  inputPrice   Float    @default(0) // Price per 1M tokens in USD
-  outputPrice  Float    @default(0) // Price per 1M tokens in USD
-  imagePrice1K Float    @default(0) // Price per 1K/2K image in USD
-  imagePrice4K Float    @default(0) // Price per 4K image in USD
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([modelId])
-}
-
-model SystemSettings {
-  id          String   @id @default(cuid())
-  key         String   @unique // e.g., 'global'
-  usdRubRate  Float    @default(100.0)
-  hostingCost Float    @default(0.0)
-  updatedAt   DateTime @updatedAt
-}
