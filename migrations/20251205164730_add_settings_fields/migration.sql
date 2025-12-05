@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "SystemSettings" ADD COLUMN     "creditsPerUsd" DOUBLE PRECISION NOT NULL DEFAULT 100,
+ADD COLUMN     "freeCreditsAmount" DOUBLE PRECISION NOT NULL DEFAULT 3;

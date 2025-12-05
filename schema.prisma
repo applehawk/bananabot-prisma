@@ -17,6 +17,7 @@ model User {
   lastName          String?
   languageCode      String        @default("en")
   credits           Float         @default(0)
+  reservedCredits   Float         @default(0)
   personalMargin    Float         @default(0) // Personal margin for this user (e.g. 0.10 for +10%)
   freeCreditsUsed   Int           @default(0)
   totalGenerated    Int           @default(0)
@@ -49,8 +50,8 @@ model UserSettings {
   useNegativePrompt Boolean           @default(true)
   notifyOnComplete  Boolean           @default(true)
   notifyOnBonus     Boolean           @default(true)
-  geminiModelId     String            @default("gemini-2.5-flash-image")
-  geminiModel       ModelTariff       @relation(fields: [geminiModelId], references: [modelId])
+  selectedModelId   String            @default("gemini-2.5-flash-image")
+  selectedModel     ModelTariff       @relation(fields: [selectedModelId], references: [modelId])
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -119,6 +120,7 @@ model ModelTariff {
   updatedAt             DateTime  @updatedAt
 
   userSettings          UserSettings[]
+  generations           Generation[]
 }
 
 model Provider {
@@ -149,10 +151,12 @@ enum AuthType {
 model SystemSettings {
   id          String   @id @default("singleton")
   key         String   @unique
-  usdRubRate  Float    @default(100)
-  hostingCost Float    @default(0)
-  systemMargin Float   @default(0) // Global system margin (e.g. 0.05 for +5%)
-  updatedAt   DateTime @updatedAt
+  usdRubRate      Float    @default(100)
+  hostingCost     Float    @default(0)
+  systemMargin    Float    @default(0) // Global system margin (e.g. 0.05 for +5%)
+  creditsPerUsd   Float    @default(100) // How many credits for 1 USD
+  freeCreditsAmount Float  @default(3)   // Free credits for new users
+  updatedAt       DateTime @updatedAt
 }
 
 
@@ -179,10 +183,20 @@ model Generation {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   inputImages    InputImage[]
 
+  // Cost & Tokens
+  modelId        String?
+  model          ModelTariff?     @relation(fields: [modelId], references: [modelId])
+  inputTokens    Int?
+  outputTokens   Int?
+  totalTokens    Int?
+  totalCostUsd   Float?
+  costDetails    Json?            // Breakdown: { baseCost, margins: { system, user, model }, finalCost }
+
   @@index([userId])
   @@index([status])
   @@index([createdAt])
   @@index([type])
+  @@index([modelId])
 }
 
 model InputImage {
