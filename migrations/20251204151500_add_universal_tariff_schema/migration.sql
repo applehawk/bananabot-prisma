@@ -1,19 +1,23 @@
 -- CreateEnum
-CREATE TYPE "AuthType" AS ENUM ('API_KEY', 'BEARER_TOKEN', 'X_API_KEY', 'GOOGLE_OAUTH', 'NONE');
+DO $$ BEGIN
+    CREATE TYPE "AuthType" AS ENUM ('API_KEY', 'BEARER_TOKEN', 'X_API_KEY', 'GOOGLE_OAUTH', 'NONE');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- AlterTable
-ALTER TABLE "AdminUser" ADD COLUMN     "password" TEXT,
+ALTER TABLE "AdminUser" ADD COLUMN IF NOT EXISTS "password" TEXT,
 ALTER COLUMN "telegramId" DROP NOT NULL;
 
 -- AlterTable
-ALTER TABLE "User" ADD COLUMN     "personalMargin" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "personalMargin" DOUBLE PRECISION NOT NULL DEFAULT 0;
 
 -- AlterTable
-ALTER TABLE "UserSettings" DROP COLUMN "geminiModel",
-ADD COLUMN     "geminiModelId" TEXT NOT NULL DEFAULT 'gemini-2.5-flash-image';
+ALTER TABLE "UserSettings" DROP COLUMN IF EXISTS "geminiModel",
+ADD COLUMN IF NOT EXISTS "geminiModelId" TEXT NOT NULL DEFAULT 'gemini-2.5-flash-image';
 
 -- CreateTable
-CREATE TABLE "ModelTariff" (
+CREATE TABLE IF NOT EXISTS "ModelTariff" (
     "id" TEXT NOT NULL,
     "modelId" TEXT NOT NULL,
     "providerId" TEXT NOT NULL,
@@ -57,7 +61,7 @@ CREATE TABLE "ModelTariff" (
 );
 
 -- CreateTable
-CREATE TABLE "Provider" (
+CREATE TABLE IF NOT EXISTS "Provider" (
     "id" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -73,7 +77,7 @@ CREATE TABLE "Provider" (
 );
 
 -- CreateTable
-CREATE TABLE "SystemSettings" (
+CREATE TABLE IF NOT EXISTS "SystemSettings" (
     "id" TEXT NOT NULL DEFAULT 'singleton',
     "key" TEXT NOT NULL,
     "usdRubRate" DOUBLE PRECISION NOT NULL DEFAULT 100,
@@ -85,23 +89,24 @@ CREATE TABLE "SystemSettings" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ModelTariff_modelId_key" ON "ModelTariff"("modelId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ModelTariff_modelId_key" ON "ModelTariff"("modelId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Provider_slug_key" ON "Provider"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Provider_slug_key" ON "Provider"("slug");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SystemSettings_key_key" ON "SystemSettings"("key");
+CREATE UNIQUE INDEX IF NOT EXISTS "SystemSettings_key_key" ON "SystemSettings"("key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AdminUser_username_key" ON "AdminUser"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "AdminUser_username_key" ON "AdminUser"("username");
 
 -- CreateIndex
-CREATE INDEX "AdminUser_username_idx" ON "AdminUser"("username");
+CREATE INDEX IF NOT EXISTS "AdminUser_username_idx" ON "AdminUser"("username");
 
 -- Seed Provider (Google)
 INSERT INTO "Provider" ("id", "slug", "name", "authType", "authHeaderName", "baseUrl")
-VALUES ('provider_google', 'google', 'Google Gemini', 'API_KEY', 'x-goog-api-key', 'https://generativelanguage.googleapis.com/v1beta');
+VALUES ('provider_google', 'google', 'Google Gemini', 'API_KEY', 'x-goog-api-key', 'https://generativelanguage.googleapis.com/v1beta')
+ON CONFLICT ("id") DO NOTHING;
 
 -- Seed ModelTariff (Gemini 2.5 Flash Image)
 INSERT INTO "ModelTariff" (
@@ -119,11 +124,21 @@ VALUES (
     'per_million_tokens', true, false, false, 
     true, 560, 1290, 
     CURRENT_TIMESTAMP
-);
+)
+ON CONFLICT ("id") DO NOTHING;
 
 -- AddForeignKey
-ALTER TABLE "UserSettings" ADD CONSTRAINT "UserSettings_geminiModelId_fkey" FOREIGN KEY ("geminiModelId") REFERENCES "ModelTariff"("modelId") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "UserSettings" ADD CONSTRAINT "UserSettings_geminiModelId_fkey" FOREIGN KEY ("geminiModelId") REFERENCES "ModelTariff"("modelId") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "ModelTariff" ADD CONSTRAINT "ModelTariff_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "Provider"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "ModelTariff" ADD CONSTRAINT "ModelTariff_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "Provider"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
 
