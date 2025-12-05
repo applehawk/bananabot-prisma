@@ -99,6 +99,28 @@ CREATE UNIQUE INDEX "AdminUser_username_key" ON "AdminUser"("username");
 -- CreateIndex
 CREATE INDEX "AdminUser_username_idx" ON "AdminUser"("username");
 
+-- Seed Provider (Google)
+INSERT INTO "Provider" ("id", "slug", "name", "authType", "authHeaderName", "baseUrl")
+VALUES ('provider_google', 'google', 'Google Gemini', 'API_KEY', 'x-goog-api-key', 'https://generativelanguage.googleapis.com/v1beta');
+
+-- Seed ModelTariff (Gemini 2.5 Flash Image)
+INSERT INTO "ModelTariff" (
+    "id", "modelId", "providerId", 
+    "name", "displayName", "description", 
+    "inputPrice", "outputPrice", "outputImagePrice", 
+    "priceUnit", "hasImageGeneration", "hasVideoGeneration", "hasNativeAudio", 
+    "isPreview", "inputImageTokens", "imageTokensLowRes", 
+    "updatedAt"
+)
+VALUES (
+    'model_gemini_flash_image', 'gemini-2.5-flash-image', 'provider_google', 
+    'Gemini 2.5 Flash Image', 'Gemini 2.5 Flash Image 🍌', 'Our native image generation model, optimized for speed, flexibility, and contextual understanding.', 
+    0.30, 2.50, 30.00, 
+    'per_million_tokens', true, false, false, 
+    true, 560, 1290, 
+    CURRENT_TIMESTAMP
+);
+
 -- AddForeignKey
 ALTER TABLE "UserSettings" ADD CONSTRAINT "UserSettings_geminiModelId_fkey" FOREIGN KEY ("geminiModelId") REFERENCES "ModelTariff"("modelId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
