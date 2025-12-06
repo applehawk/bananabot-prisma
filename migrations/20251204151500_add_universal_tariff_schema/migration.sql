@@ -60,11 +60,6 @@ CREATE TABLE IF NOT EXISTS "ModelTariff" (
     CONSTRAINT "ModelTariff_pkey" PRIMARY KEY ("id")
 );
 
--- Ensure columns exist (in case table existed but was incomplete)
-ALTER TABLE "ModelTariff" ADD COLUMN IF NOT EXISTS "inputImageTokens" INTEGER;
-ALTER TABLE "ModelTariff" ADD COLUMN IF NOT EXISTS "imageTokensLowRes" INTEGER;
-
-
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "Provider" (
     "id" TEXT NOT NULL,
@@ -96,6 +91,32 @@ CREATE TABLE IF NOT EXISTS "SystemSettings" (
 -- CreateIndex
 CREATE UNIQUE INDEX IF NOT EXISTS "ModelTariff_modelId_key" ON "ModelTariff"("modelId");
 
+-- Seed Provider (Google)
+INSERT INTO "Provider" ("id", "slug", "name", "authType", "authHeaderName", "baseUrl")
+VALUES ('provider_google', 'google', 'Google Gemini', 'API_KEY', 'x-goog-api-key', 'https://generativelanguage.googleapis.com/v1beta')
+ON CONFLICT ("id") DO NOTHING;
+
+-- Seed ModelTariff (Gemini 2.5 Flash Image)
+-- RE-ADDED: We need this row to exist for the FK constraint below.
+-- Note: inputImageTokens is NOT in this migration yet, so we exclude it.
+INSERT INTO "ModelTariff" (
+    "id", "modelId", "providerId",
+    "name", "displayName", "description",
+    "inputPrice", "outputPrice", "outputImagePrice",
+    "priceUnit", "hasImageGeneration", "hasVideoGeneration", "hasNativeAudio",
+    "isPreview",
+    "updatedAt"
+)
+VALUES (
+    'model_gemini_flash_image', 'gemini-2.5-flash-image', 'provider_google',
+    'Gemini 2.5 Flash Image', 'Gemini 2.5 Flash Image 🍌', 'Our native image generation model, optimized for speed, flexibility, and contextual understanding.',
+    0.30, 2.50, 30.00,
+    'per_million_tokens', true, false, false,
+    true,
+    CURRENT_TIMESTAMP
+)
+ON CONFLICT ("id") DO NOTHING;
+
 -- CreateIndex
 CREATE UNIQUE INDEX IF NOT EXISTS "Provider_slug_key" ON "Provider"("slug");
 
@@ -107,30 +128,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS "AdminUser_username_key" ON "AdminUser"("usern
 
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "AdminUser_username_idx" ON "AdminUser"("username");
-
--- Seed Provider (Google)
-INSERT INTO "Provider" ("id", "slug", "name", "authType", "authHeaderName", "baseUrl")
-VALUES ('provider_google', 'google', 'Google Gemini', 'API_KEY', 'x-goog-api-key', 'https://generativelanguage.googleapis.com/v1beta')
-ON CONFLICT ("id") DO NOTHING;
-
--- Seed ModelTariff (Gemini 2.5 Flash Image)
-INSERT INTO "ModelTariff" (
-    "id", "modelId", "providerId", 
-    "name", "displayName", "description", 
-    "inputPrice", "outputPrice", "outputImagePrice", 
-    "priceUnit", "hasImageGeneration", "hasVideoGeneration", "hasNativeAudio", 
-    "isPreview", "inputImageTokens", "imageTokensLowRes", 
-    "updatedAt"
-)
-VALUES (
-    'model_gemini_flash_image', 'gemini-2.5-flash-image', 'provider_google', 
-    'Gemini 2.5 Flash Image', 'Gemini 2.5 Flash Image 🍌', 'Our native image generation model, optimized for speed, flexibility, and contextual understanding.', 
-    0.30, 2.50, 30.00, 
-    'per_million_tokens', true, false, false, 
-    true, 560, 1290, 
-    CURRENT_TIMESTAMP
-)
-ON CONFLICT ("id") DO NOTHING;
 
 -- AddForeignKey
 DO $$ BEGIN
