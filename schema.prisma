@@ -27,6 +27,7 @@ model User {
   updatedAt         DateTime      @updatedAt
   lastActiveAt      DateTime      @default(now())
   dailyBonus        DailyBonus?
+  isSubscribed      Boolean       @default(false)
   generations       Generation[]
   referralsReceived Referral[]    @relation("Referred")
   referralsGiven    Referral[]    @relation("Referrer")
@@ -47,6 +48,7 @@ model UserSettings {
   safetyLevel       String            @default("BLOCK_MEDIUM_AND_ABOVE")
   language          String            @default("en")
   hdQuality         Boolean           @default(false)
+  isSubscriptionRequired Boolean      @default(true)
   autoEnhance       Boolean           @default(true)
   useNegativePrompt Boolean           @default(true)
   notifyOnComplete  Boolean           @default(true)
@@ -155,6 +157,8 @@ model SystemSettings {
   usdRubRate      Float    @default(100)
   hostingCost     Float    @default(0)
   systemMargin    Float    @default(0) // Global system margin (e.g. 0.05 for +5%)
+  telegramChannelId String?
+  isSubscriptionRequired Boolean @default(false)
   creditsPerUsd   Float    @default(100) // How many credits for 1 USD
   freeCreditsAmount Float  @default(3)   // Free credits for new users
   updatedAt       DateTime @updatedAt
@@ -378,6 +382,7 @@ model Broadcast {
   message     String
   status      BroadcastStatus @default(PENDING)
   scheduledFor DateTime?
+  targetNotSubscribed Boolean @default(false)
   startedAt   DateTime?
   completedAt DateTime?
   
