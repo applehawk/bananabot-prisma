@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS "ModelTariff" (
     CONSTRAINT "ModelTariff_pkey" PRIMARY KEY ("id")
 );
 
+-- Ensure columns exist (in case table existed but was incomplete)
+ALTER TABLE "ModelTariff" ADD COLUMN IF NOT EXISTS "inputImageTokens" INTEGER;
+ALTER TABLE "ModelTariff" ADD COLUMN IF NOT EXISTS "imageTokensLowRes" INTEGER;
+
+
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "Provider" (
     "id" TEXT NOT NULL,
