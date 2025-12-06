@@ -1,19 +1,14 @@
--- CreateEnum
-CREATE TYPE "BroadcastStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
+-- CreateEnum Safe
+DO $$ BEGIN
+    CREATE TYPE "BroadcastStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- AlterEnum
-BEGIN;
-CREATE TYPE "TransactionStatus_new" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'REFUNDED', 'CANCELLED');
-ALTER TABLE "public"."Transaction" ALTER COLUMN "status" DROP DEFAULT;
-ALTER TABLE "Transaction" ALTER COLUMN "status" TYPE "TransactionStatus_new" USING ("status"::text::"TransactionStatus_new");
-ALTER TYPE "TransactionStatus" RENAME TO "TransactionStatus_old";
-ALTER TYPE "TransactionStatus_new" RENAME TO "TransactionStatus";
-DROP TYPE "public"."TransactionStatus_old";
-ALTER TABLE "Transaction" ALTER COLUMN "status" SET DEFAULT 'PENDING';
-COMMIT;
+
 
 -- CreateTable
-CREATE TABLE "AdminMessage" (
+CREATE TABLE IF NOT EXISTS "AdminMessage" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "adminId" TEXT,
@@ -28,7 +23,7 @@ CREATE TABLE "AdminMessage" (
 );
 
 -- CreateTable
-CREATE TABLE "Broadcast" (
+CREATE TABLE IF NOT EXISTS "Broadcast" (
     "id" TEXT NOT NULL,
     "message" TEXT NOT NULL,
     "status" "BroadcastStatus" NOT NULL DEFAULT 'PENDING',
@@ -46,25 +41,41 @@ CREATE TABLE "Broadcast" (
 );
 
 -- CreateIndex
-CREATE INDEX "AdminMessage_userId_idx" ON "AdminMessage"("userId");
+CREATE INDEX IF NOT EXISTS "AdminMessage_userId_idx" ON "AdminMessage"("userId");
 
 -- CreateIndex
-CREATE INDEX "AdminMessage_sentAt_idx" ON "AdminMessage"("sentAt");
+CREATE INDEX IF NOT EXISTS "AdminMessage_sentAt_idx" ON "AdminMessage"("sentAt");
 
 -- CreateIndex
-CREATE INDEX "AdminMessage_broadcastId_idx" ON "AdminMessage"("broadcastId");
+CREATE INDEX IF NOT EXISTS "AdminMessage_broadcastId_idx" ON "AdminMessage"("broadcastId");
 
 -- CreateIndex
-CREATE INDEX "Broadcast_status_idx" ON "Broadcast"("status");
+CREATE INDEX IF NOT EXISTS "Broadcast_status_idx" ON "Broadcast"("status");
 
 -- AddForeignKey
-ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AdminMessage_userId_fkey') THEN
+        ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AdminMessage_adminId_fkey') THEN
+        ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_broadcastId_fkey" FOREIGN KEY ("broadcastId") REFERENCES "Broadcast"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AdminMessage_broadcastId_fkey') THEN
+        ALTER TABLE "AdminMessage" ADD CONSTRAINT "AdminMessage_broadcastId_fkey" FOREIGN KEY ("broadcastId") REFERENCES "Broadcast"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Broadcast" ADD CONSTRAINT "Broadcast_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Broadcast_createdBy_fkey') THEN
+        ALTER TABLE "Broadcast" ADD CONSTRAINT "Broadcast_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;

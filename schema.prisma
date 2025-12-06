@@ -434,6 +434,7 @@ enum TransactionStatus {
   PROCESSING
   COMPLETED
   REFUNDED
+  FAILED
   CANCELLED
 }
 
