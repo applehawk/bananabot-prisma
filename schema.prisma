@@ -161,6 +161,8 @@ model SystemSettings {
   isSubscriptionRequired Boolean @default(false)
   creditsPerUsd   Float    @default(100) // How many credits for 1 USD
   freeCreditsAmount Float  @default(3)   // Free credits for new users
+  referralBonusAmount Float @default(50) // Bonus for referrer
+  referralFirstPurchaseBonus Float @default(150) // Bonus for first purchase of referral
   updatedAt       DateTime @updatedAt
 }
 
