@@ -386,6 +386,7 @@ model Broadcast {
   status      BroadcastStatus @default(PENDING)
   scheduledFor DateTime?
   targetNotSubscribed Boolean @default(false)
+  botToken    String?
   startedAt   DateTime?
   completedAt DateTime?
   
