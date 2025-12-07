@@ -34,6 +34,7 @@ model User {
   transactions      Transaction[]
   settings          UserSettings?
   adminMessages     AdminMessage[]
+  chatMessages      ChatMessage[]
 
   @@index([telegramId])
   @@index([referralCode])
@@ -453,3 +454,21 @@ enum BroadcastStatus {
   CANCELLED
 }
 
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content   String
+  mode      String   @default("help") 
+  
+  isFromUser Boolean @default(true)
+  isRead    Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([mode])
+}
