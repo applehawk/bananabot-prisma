@@ -54,6 +54,7 @@ model UserSettings {
   useNegativePrompt Boolean           @default(true)
   notifyOnComplete  Boolean           @default(true)
   notifyOnBonus     Boolean           @default(true)
+  askAspectRatio    Boolean           @default(false) // Option to ask for aspect ratio
   selectedModelId   String            @default("gemini-2.5-flash-image")
   selectedModel     ModelTariff       @relation(fields: [selectedModelId], references: [modelId])
   createdAt         DateTime          @default(now())
