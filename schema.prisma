@@ -98,6 +98,9 @@ model ModelTariff {
   videoTokensPerSecond  Int?      // tokens per second of video
   audioTokensPerMinute  Int?      // tokens per minute of audio
 
+  inputImagesLimit      Int       @default(5) // Max number of input images allowed
+
+
   // === Technical Parameters ===
   maxTokens             Int?
   maxVideoDuration      Int?
