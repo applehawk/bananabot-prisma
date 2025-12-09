@@ -432,6 +432,7 @@ enum TransactionType {
   ADMIN_ADJUSTMENT
   GENERATION_COST
   REFUND
+  TRANSFER
 }
 
 enum PaymentMethod {
