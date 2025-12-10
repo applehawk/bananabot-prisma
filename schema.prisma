@@ -168,6 +168,7 @@ model SystemSettings {
   freeCreditsAmount Float  @default(3)   // Free credits for new users
   referralBonusAmount Float @default(50) // Bonus for referrer
   referralFirstPurchaseBonus Float @default(150) // Bonus for first purchase of referral
+  defaultNewUserModelId String @default("gemini-2.5-flash-image") // Default model for new users
   updatedAt       DateTime @updatedAt
 }
 
@@ -297,6 +298,7 @@ model CreditPackage {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
+  broadcasts    Broadcast[]
 
   @@index([active])
   @@index([popular])
@@ -397,6 +399,9 @@ model Broadcast {
   totalUsers  Int      @default(0)
   sentCount   Int      @default(0)
   failedCount Int      @default(0)
+
+  creditPackageId String?
+  creditPackage   CreditPackage? @relation(fields: [creditPackageId], references: [id])
   
   createdBy   String?
   creator     AdminUser? @relation(fields: [createdBy], references: [id])
