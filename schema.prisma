@@ -19,7 +19,7 @@ model User {
   credits           Float         @default(0)
   reservedCredits   Float         @default(0)
   personalMargin    Float         @default(0) // Personal margin for this user (e.g. 0.10 for +10%)
-  freeCreditsUsed   Int           @default(0)
+  freeCreditsUsed   Float         @default(0)
   totalGenerated    Int           @default(0)
   referralCode      String        @unique
   referredBy        String?
@@ -303,6 +303,7 @@ model CreditPackage {
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
   broadcasts    Broadcast[]
+  retentionStages RetentionStage[]
   
   @@index([active])
   @@index([popular])
@@ -499,6 +500,27 @@ model RetentionStage {
   hoursSinceRegistration Int?
   hoursSinceLastActivity Int?
   hoursSinceLastStage    Int?
+
+  // Special Offer
+  isSpecialOffer  Boolean        @default(false)
+  creditPackageId String?
+  creditPackage   CreditPackage? @relation(fields: [creditPackageId], references: [id])
+  specialOfferLabel String?
+
+  // Random Generation Button
+  isRandomGenerationEnabled Boolean @default(false)
+  randomGenerationLabel     String?
+
+  // Conditions
+  conditionGenerations    Int?
+  conditionPaymentPresent Boolean?
+  
+  // Triggers
+  hoursSinceFirstPayment  Int?
+
+  // Active Hours
+  activeHoursStart        Int?
+  activeHoursEnd          Int?
 
   buttons      Json?              // e.g. [{ text: 'Button', web_app: '...' }, { text: 'Key', callback_data: '...' }]
   

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ALTER COLUMN "freeCreditsUsed" SET DEFAULT 0,
+ALTER COLUMN "freeCreditsUsed" SET DATA TYPE DOUBLE PRECISION;
