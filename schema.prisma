@@ -399,6 +399,8 @@ model Broadcast {
   totalUsers  Int      @default(0)
   sentCount   Int      @default(0)
   failedCount Int      @default(0)
+  
+  targetUserIds String[]
 
   creditPackageId String?
   creditPackage   CreditPackage? @relation(fields: [creditPackageId], references: [id])
