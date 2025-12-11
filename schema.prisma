@@ -28,6 +28,8 @@ model User {
   lastActiveAt      DateTime      @default(now())
   dailyBonus        DailyBonus?
   isSubscribed      Boolean       @default(false)
+  retentionStage    Int           @default(0)
+  lastRetentionMessageAt DateTime?
   generations       Generation[]
   referralsReceived Referral[]    @relation("Referred")
   referralsGiven    Referral[]    @relation("Referrer")
@@ -164,11 +166,13 @@ model SystemSettings {
   systemMargin    Float    @default(0) // Global system margin (e.g. 0.05 for +5%)
   telegramChannelId String?
   isSubscriptionRequired Boolean @default(false)
+  isRetentionEnabled Boolean @default(false)
   creditsPerUsd   Float    @default(100) // How many credits for 1 USD
   freeCreditsAmount Float  @default(3)   // Free credits for new users
   referralBonusAmount Float @default(50) // Bonus for referrer
   referralFirstPurchaseBonus Float @default(150) // Bonus for first purchase of referral
   defaultNewUserModelId String @default("gemini-2.5-flash-image") // Default model for new users
+  tripwirePackageId String? // Package to offer when user runs out of credits
   updatedAt       DateTime @updatedAt
 }
 
@@ -299,7 +303,7 @@ model CreditPackage {
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
   broadcasts    Broadcast[]
-
+  
   @@index([active])
   @@index([popular])
 }
@@ -484,4 +488,24 @@ model ChatMessage {
   @@index([userId])
   @@index([createdAt])
   @@index([mode])
+}
+
+model RetentionStage {
+  id           String             @id @default(cuid())
+  order        Int                @default(1)
+  name         String
+  message      String
+  
+  hoursSinceRegistration Int?
+  hoursSinceLastActivity Int?
+  hoursSinceLastStage    Int?
+
+  buttons      Json?              // e.g. [{ text: 'Button', web_app: '...' }, { text: 'Key', callback_data: '...' }]
+  
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([order])
+  @@index([isActive])
 }
