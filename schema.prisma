@@ -37,6 +37,7 @@ model User {
   settings          UserSettings?
   adminMessages     AdminMessage[]
   chatMessages      ChatMessage[]
+  userBurnableBonuses UserBurnableBonus[]
 
   @@index([telegramId])
   @@index([referralCode])
@@ -52,11 +53,12 @@ model UserSettings {
   language          String            @default("en")
   hdQuality         Boolean           @default(false)
   isSubscriptionRequired Boolean      @default(true)
-  autoEnhance       Boolean           @default(true)
+  autoEnhance       Boolean           @default(false)
   useNegativePrompt Boolean           @default(true)
   notifyOnComplete  Boolean           @default(true)
   notifyOnBonus     Boolean           @default(true)
   askAspectRatio    Boolean           @default(false) // Option to ask for aspect ratio
+  enhancementPrompt String?           @default("You are an expert at writing prompts for AI image generation.\nTake this user prompt and enhance it to create a detailed, high-quality image generation prompt.\nAdd details about style, lighting, composition, and quality while keeping the original intent.\nReturn ONLY the enhanced prompt, nothing else.")
   selectedModelId   String            @default("gemini-2.5-flash-image")
   selectedModel     ModelTariff       @relation(fields: [selectedModelId], references: [modelId])
   createdAt         DateTime          @default(now())
@@ -195,6 +197,7 @@ model Generation {
   errorMessage   String?
   metadata       Json?
   processingTime Int?
+  reservedAmount Float            @default(0)
   createdAt      DateTime         @default(now())
   completedAt    DateTime?
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -386,6 +389,9 @@ model AdminMessage {
   status      String   @default("SENT") // SENT, FAILED
   error       String?
 
+  burnableBonusId        String?
+  burnableBonus          BurnableBonus? @relation(fields: [burnableBonusId], references: [id])
+
   @@index([userId])
   @@index([sentAt])
   @@index([broadcastId])
@@ -414,6 +420,9 @@ model Broadcast {
   creator     AdminUser? @relation(fields: [createdBy], references: [id])
   
   messages    AdminMessage[]
+
+  burnableBonusId        String?
+  burnableBonus          BurnableBonus? @relation(fields: [burnableBonusId], references: [id])
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -445,6 +454,7 @@ enum TransactionType {
   GENERATION_COST
   REFUND
   TRANSFER
+  EXPIRED_BONUS
 }
 
 enum PaymentMethod {
@@ -528,6 +538,61 @@ model RetentionStage {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
+  burnableBonusId        String?
+  burnableBonus          BurnableBonus? @relation(fields: [burnableBonusId], references: [id])
+
   @@unique([order])
   @@index([isActive])
+}
+
+model BurnableBonus {
+  id                     String   @id @default(cuid())
+  amount                 Float
+  expiresInHours         Int?     // Duration in hours
+  expiresAt              DateTime? // Specific date deadline
+
+  // Conditions to keep (make permanent)
+  conditionGenerations   Int?     @default(1)
+  conditionTopUpAmount   Float?
+
+  // Relations
+  retentionStages        RetentionStage[]
+  broadcasts             Broadcast[]
+  adminMessages          AdminMessage[]
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model UserBurnableBonus {
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount                 Float
+  deadline               DateTime
+
+  // Snapshot of conditions
+  generationsRequired    Int?
+  topUpAmountRequired    Float?
+
+  // Progress tracking
+  generationsMade        Int      @default(0)
+  topUpMade              Float    @default(0)
+
+  status                 BurnableBonusStatus @default(ACTIVE)
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([deadline])
+}
+
+enum BurnableBonusStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  REVOKED
 }
