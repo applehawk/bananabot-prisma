@@ -27,6 +27,7 @@ model User {
   updatedAt         DateTime      @updatedAt
   lastActiveAt      DateTime      @default(now())
   dailyBonus        DailyBonus?
+  isBlocked         Boolean       @default(false)
   isSubscribed      Boolean       @default(false)
   retentionStage    Int           @default(0)
   lastRetentionMessageAt DateTime?
@@ -42,6 +43,18 @@ model User {
   @@index([telegramId])
   @@index([referralCode])
   @@index([createdAt])
+
+
+  // [NEW] Tags for FSM segmentation (secondary states)
+  tags String[] @default([])
+  
+  // [NEW] 2-Level FSM Architecture
+  lifecycleState LifecycleState @default(NEW)
+  overlays       UserOverlay[]
+
+  // [DEPRECATED] FSM State tracking (Keep for now until migration complete)
+  fsmState    UserFSMState?
+  fsmHistory  UserFSMHistory[]
 }
 
 model UserSettings {
@@ -472,6 +485,7 @@ enum TransactionStatus {
   REFUNDED
   FAILED
   CANCELLED
+  TIMEOUT
 }
 
 enum BroadcastStatus {
@@ -595,4 +609,261 @@ enum BurnableBonusStatus {
   COMPLETED
   EXPIRED
   REVOKED
+}
+
+// ==========================================
+// FSM RETENTION SYSTEM MODELS
+// ==========================================
+
+// 1. Versioning
+model FSMVersion {
+  id        Int      @id @default(autoincrement())
+  name      String
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  states      FSMState[]
+  transitions FSMTransition[]
+}
+
+// 2. Enums
+enum FSMTriggerType {
+  EVENT
+  TIME
+}
+
+enum FSMEvent {
+  // System
+  BOT_START
+  
+  // Generation
+  FIRST_GENERATION
+  GENERATION
+  GENERATION_PENDING 
+  GENERATION_FAILED
+  MODEL_SELECTED
+  
+  // Payment
+  PAYMENT_CLICKED
+  PAYMENT_PENDING
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  PAYMENT_TIMEOUT
+  PACKAGE_VIEW
+  PACKAGE_PURCHASE
+  
+  // Credits
+  CREDITS_CHANGED
+  CREDITS_ZERO
+  
+  // Internal
+  TIMEOUT
+  LAST_ACTIVITY
+  UNSUBSCRIBE
+  
+  // Referral
+  REFERRAL_INVITE
+  REFERRAL_PAID
+
+  // Channel
+  CHANNEL_SUBSCRIPTION
+
+  // Offers
+  TRIPWIRE_SHOWN
+  INSUFFICIENT_CREDITS
+
+  // Bonus
+  BONUS_GRANTED
+  BONUS_EXPIRED
+}
+
+enum FSMActionType {
+  SEND_MESSAGE
+  SEND_SPECIAL_OFFER
+  GRANT_BURNABLE_BONUS
+  SHOW_TRIPWIRE
+  ENABLE_REFERRAL
+  SWITCH_MODEL_HINT
+  TAG_USER
+  NO_ACTION
+}
+
+model FSMState {
+  id          String   @id @default(cuid())
+  
+  // Versioning
+  versionId   Int
+  version     FSMVersion @relation(fields: [versionId], references: [id])
+
+  name        String   // Unique per version
+  description String?
+  isInitial   Boolean  @default(false)
+  isTerminal  Boolean  @default(false) // Stops evaluation
+  
+  // UI Coordinates
+  positionX   Float    @default(0)
+  positionY   Float    @default(0)
+
+  // Transitions
+  transitions         FSMTransition[] @relation("FromState")
+  incomingTransitions FSMTransition[] @relation("ToState")
+
+  // Users currently in this state
+  currentUsers UserFSMState[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([versionId, name])
+}
+
+model FSMTransition {
+  id          String   @id @default(cuid())
+  
+  versionId   Int
+  version     FSMVersion @relation(fields: [versionId], references: [id])
+
+  fromStateId String
+  toStateId   String
+  fromState   FSMState @relation("FromState", fields: [fromStateId], references: [id], onDelete: Cascade)
+  toState     FSMState @relation("ToState", fields: [toStateId], references: [id], onDelete: Cascade)
+  
+  triggerType FSMTriggerType @default(EVENT)
+
+  // Event Trigger
+  triggerEvent FSMEvent?
+  
+  // Time Trigger
+  timeFrom       String? // "entered_state" | "last_generation" | "last_payment"
+  timeoutMinutes Int?
+  
+  // Conditions
+  conditions  FSMCondition[]
+  
+  // Actions
+  actions     FSMAction[]
+
+  priority    Int @default(0) 
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([fromStateId])
+  @@index([triggerEvent])
+}
+
+model FSMCondition {
+  id            String       @id @default(cuid())
+  transitionId  String
+  transition    FSMTransition @relation(fields: [transitionId], references: [id], onDelete: Cascade)
+  
+  groupId       Int         @default(0) // AND within group, OR between groups
+
+  // DSL: Field Operator Value
+  field         String      
+  operator      String      
+  value         String      
+
+  createdAt     DateTime @default(now())
+}
+
+model FSMAction {
+  id            String       @id @default(cuid())
+  transitionId  String
+  transition    FSMTransition @relation(fields: [transitionId], references: [id], onDelete: Cascade)
+  
+  type          FSMActionType
+  config        Json?        
+  order         Int          @default(0)
+
+  createdAt     DateTime @default(now())
+}
+
+model UserFSMState {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  stateId       String
+  state         FSMState @relation(fields: [stateId], references: [id])
+  
+  versionId     Int      // Track which version user is on
+  
+  enteredAt     DateTime @default(now())
+  lastCheckedAt DateTime @default(now()) 
+  
+  context       Json?    
+  
+  updatedAt     DateTime @updatedAt
+  
+  @@index([stateId])
+  @@index([lastCheckedAt])
+}
+
+model UserFSMHistory {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  fromStateId   String?
+  toStateId     String
+  
+  triggerEvent  FSMEvent?
+  
+  // Snapshot
+  transitionId  String?
+  actionsTaken  Json?   
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+  @@index([toStateId])
+}
+
+// Metrics
+model FSMStateMetric {
+  stateId        String
+  usersCount     Int
+  avgTimeSeconds Int
+  p90TimeSeconds Int
+  calculatedAt   DateTime @default(now())
+
+  @@id([stateId, calculatedAt])
+}
+
+// 2-Level Lifecycle FSM
+enum LifecycleState {
+  NEW
+  ACTIVATING
+  ACTIVE_FREE
+  PAYWALL
+  PAID_ACTIVE
+  INACTIVE
+  CHURNED
+  BLOCKED
+}
+
+enum OverlayType {
+  TRIPWIRE
+  BONUS
+  REFERRAL
+  SPECIAL_OFFER
+}
+
+model UserOverlay {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+
+  type       OverlayType
+  state      String      // ELIGIBLE | ACTIVE | EXPIRING | EXPIRED
+  expiresAt  DateTime?
+  metadata   Json?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, type])
 }

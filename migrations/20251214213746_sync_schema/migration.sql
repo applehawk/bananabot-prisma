@@ -1,0 +1,21 @@
+/*
+  Warnings:
+
+  - The values [PAYMENT_SUCCESS] on the enum `FSMEvent` will be removed. If these variants are still used in the database, this will fail.
+
+*/
+-- AlterEnum
+BEGIN;
+CREATE TYPE "FSMEvent_new" AS ENUM ('BOT_START', 'FIRST_GENERATION', 'GENERATION', 'GENERATION_PENDING', 'GENERATION_FAILED', 'MODEL_SELECTED', 'PAYMENT_CLICKED', 'PAYMENT_PENDING', 'PAYMENT_COMPLETED', 'PAYMENT_FAILED', 'PAYMENT_TIMEOUT', 'PACKAGE_VIEW', 'PACKAGE_PURCHASE', 'CREDITS_CHANGED', 'CREDITS_ZERO', 'TIMEOUT', 'LAST_ACTIVITY', 'UNSUBSCRIBE', 'REFERRAL_INVITE', 'REFERRAL_PAID', 'CHANNEL_SUBSCRIPTION', 'TRIPWIRE_SHOWN', 'INSUFFICIENT_CREDITS', 'BONUS_GRANTED', 'BONUS_EXPIRED');
+ALTER TABLE "FSMTransition" ALTER COLUMN "triggerEvent" TYPE "FSMEvent_new" USING ("triggerEvent"::text::"FSMEvent_new");
+ALTER TABLE "UserFSMHistory" ALTER COLUMN "triggerEvent" TYPE "FSMEvent_new" USING ("triggerEvent"::text::"FSMEvent_new");
+ALTER TYPE "FSMEvent" RENAME TO "FSMEvent_old";
+ALTER TYPE "FSMEvent_new" RENAME TO "FSMEvent";
+DROP TYPE "public"."FSMEvent_old";
+COMMIT;
+
+-- AlterEnum
+ALTER TYPE "TransactionStatus" ADD VALUE 'TIMEOUT';
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "isBlocked" BOOLEAN NOT NULL DEFAULT false;
