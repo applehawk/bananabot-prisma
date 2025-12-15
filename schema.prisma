@@ -676,6 +676,11 @@ enum FSMEvent {
   // Bonus
   BONUS_GRANTED
   BONUS_EXPIRED
+
+  // Lifecycle
+  USER_BLOCKED
+  USER_UNBLOCKED
+  GENERATION_COMPLETED
 }
 
 enum FSMActionType {
@@ -845,6 +850,7 @@ enum LifecycleState {
   BLOCKED
 }
 
+
 enum OverlayType {
   TRIPWIRE
   BONUS
@@ -852,18 +858,104 @@ enum OverlayType {
   SPECIAL_OFFER
 }
 
+enum OverlayState {
+  ELIGIBLE
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum RuleTrigger {
+  BOT_START
+  GENERATION_REQUESTED
+  GENERATION_COMPLETED
+  CREDITS_CHANGED
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  TIME
+  ADMIN_EVENT
+  OVERLAY_ACTIVATED
+  OVERLAY_EXPIRED
+  REFERRAL_INVITE
+  REFERRAL_PAID
+  STREAK_REACHED
+}
+
+enum RuleActionType {
+  ACTIVATE_OVERLAY
+  DEACTIVATE_OVERLAY
+  SEND_MESSAGE
+  SEND_SPECIAL_OFFER
+  GRANT_BONUS
+  NO_ACTION
+}
+
+enum RuleConditionOperator {
+  EQUALS
+  NOT_EQUALS
+  GT
+  GTE
+  LT
+  LTE
+  IN
+  NOT_IN
+  EXISTS
+  NOT_EXISTS
+}
+
 model UserOverlay {
-  id         String      @id @default(cuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id])
+  id            String        @id @default(cuid())
+  userId        String
+  type          OverlayType
+  state         OverlayState
+  metadata      Json?
+  credits       Int?          // for BONUS
+  expiresAt     DateTime?
+  activatedAt   DateTime      @default(now())
+  deactivatedAt DateTime?
 
-  type       OverlayType
-  state      String      // ELIGIBLE | ACTIVE | EXPIRING | EXPIRED
-  expiresAt  DateTime?
-  metadata   Json?
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  user          User           @relation(fields: [userId], references: [id])
 
   @@index([userId, type])
+  @@index([state, expiresAt])
+}
+
+model Rule {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  isActive    Boolean      @default(true)
+  priority    Int          @default(0)
+  trigger     RuleTrigger
+  description String?
+
+  conditions  RuleCondition[]
+  actions     RuleAction[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model RuleCondition {
+  id        String                 @id @default(cuid())
+  ruleId    String
+  field     String                 // e.g. "lifecycle", "credits", "overlay.TRIPWIRE"
+  operator  RuleConditionOperator
+  value     String?
+  groupId   Int                    @default(0)
+
+  rule      Rule                   @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId, groupId])
+}
+
+model RuleAction {
+  id        String          @id @default(cuid())
+  ruleId    String
+  type      RuleActionType
+  params    Json?
+  order     Int             @default(0)
+
+  rule      Rule            @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId, order])
 }
