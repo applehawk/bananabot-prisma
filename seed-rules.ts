@@ -1,7 +1,10 @@
 
 import { PrismaClient, RuleTrigger, RuleActionType, RuleConditionOperator, OverlayType } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL!;
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
     console.log('🌱 Seeding Rules Engine (Standard Rules)...');
@@ -46,63 +49,177 @@ async function main() {
         console.log(`✅ Rule Created: ${code}`);
     };
 
-    console.log('--- 1. Tripwire Rules ---');
+    console.log('--- 1. Lifecycle Rules (State-Based) ---');
 
-    // TW-1: Eligibility (Credits Changed -> Paywall, No Payments, No Tripwire)
+    // LC-1: Welcome on Active (Bonus)
     await createRule(
-        'TW-1',
-        RuleTrigger.CREDITS_CHANGED,
+        'LC-1-WELCOME',
+        RuleTrigger.STATE_CHANGED,
         100,
-        'Tripwire Eligibility Check',
+        'Welcome Bonus on Active',
         [
-            { field: 'lifecycle', operator: RuleConditionOperator.EQUALS, value: 'PAYWALL' },
-            { field: 'totalPayments', operator: RuleConditionOperator.EQUALS, value: '0' },
-            { field: 'overlay.TRIPWIRE', operator: RuleConditionOperator.NOT_EXISTS }
+            { field: 'to_state_name', operator: RuleConditionOperator.EQUALS, value: 'ACTIVE_FREE' }
         ],
         [
             {
                 type: RuleActionType.ACTIVATE_OVERLAY,
-                params: { type: OverlayType.TRIPWIRE, ttlHours: 24 }
+                params: { type: OverlayType.INFO, text: '🎉 Поздравляем! Вы теперь активный пользователь. Держите бонус!' }
+            },
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.BONUS, amount: 10, hours: 24 }
             }
         ]
     );
 
-    // TW-2: Show (Overlay Activated -> Send Offer)
+    // LC-2: Paywall Tripwire
+    // Replaces old TW-1/TW-1-GEN with robust FSM state check
     await createRule(
-        'TW-2',
-        RuleTrigger.OVERLAY_ACTIVATED,
-        100,
-        'Tripwire Show UI',
+        'LC-2-TRIPWIRE',
+        RuleTrigger.STATE_CHANGED,
+        200, // High priority
+        'Paywall Tripwire Activation',
         [
-            { field: 'overlay.type', operator: RuleConditionOperator.EQUALS, value: OverlayType.TRIPWIRE }
+            { field: 'to_state_name', operator: RuleConditionOperator.EQUALS, value: 'PAYWALL' }
         ],
         [
-            { type: RuleActionType.SEND_SPECIAL_OFFER, params: { offerId: 'tripwire_v1' } }
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: '⚠️ Бесплатные генерации закончились!' }
+            },
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.TRIPWIRE } }
         ]
     );
 
-    // TW-3: Expire (Time -> Deactivate)
-    // Note: Assuming "overlay(TRIPWIRE).expired" condition logic is handled by the evaluator checking expiration times
+    // LC-3: Thank You Purchase
     await createRule(
-        'TW-3',
+        'LC-3-THANK',
+        RuleTrigger.STATE_CHANGED,
+        100,
+        'Thank You for Purchase',
+        [
+            { field: 'to_state_name', operator: RuleConditionOperator.EQUALS, value: 'ACTIVE_PAID' }
+        ],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: 'Спасибо за покупку! Вы теперь VIP 💎' }
+            }
+        ]
+    );
+
+    // LC-4: Inactivity Nudge
+    await createRule(
+        'LC-4-INACTIVE',
+        RuleTrigger.STATE_CHANGED,
+        100,
+        'Inactivity Nudge',
+        [
+            { field: 'to_state_name', operator: RuleConditionOperator.EQUALS, value: 'INACTIVE' }
+        ],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: 'Мы скучаем! 🥺' }
+            }
+        ]
+    );
+
+    // LC-5: Resurrection
+    await createRule(
+        'LC-5-RESURRECT',
+        RuleTrigger.STATE_CHANGED,
+        100,
+        'Resurrection Welcome',
+        [
+            { field: 'to_state_name', operator: RuleConditionOperator.EQUALS, value: 'ACTIVE_FREE' },
+            { field: 'trigger_event', operator: RuleConditionOperator.EQUALS, value: 'BOT_START' } // Only if manually started
+        ],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: 'С возвращением!' }
+            }
+        ]
+    );
+
+
+    console.log('--- 2. Business Rules (Achievements & Utility) ---');
+
+    // B-1: Milestone 10 Gens
+    await createRule(
+        'B-1-10GENS',
+        RuleTrigger.GENERATION_COMPLETED,
+        100,
+        'Achievement: 10 Generations',
+        [{ field: 'totalGenerations', operator: RuleConditionOperator.EQUALS, value: '10' }],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: '🏆 Достижение: 10 генераций! Вот вам 50 монет.' }
+            },
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.BONUS, amount: 50, hours: 48 }
+            }
+        ]
+    );
+
+    // B-2: Milestone 50 Gens (Existing B-1)
+    await createRule(
+        'B-2-50GENS',
+        RuleTrigger.GENERATION_COMPLETED,
+        100,
+        'Milestone Bonus (50 gens)',
+        [
+            { field: 'lifecycle', operator: RuleConditionOperator.EQUALS, value: 'PAID_ACTIVE', groupId: 1 },
+            { field: 'isMilestone', operator: RuleConditionOperator.EQUALS, value: 'true', groupId: 1 }
+        ],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: {
+                    type: OverlayType.BONUS,
+                    amount: 25,
+                    reason: 'milestone_50'
+                }
+            }
+        ]
+    );
+
+    // U-1: Expired Bonus Notification
+    await createRule(
+        'U-1-EXPIRED',
+        RuleTrigger.OVERLAY_EXPIRED,
+        50,
+        'Notify Expired Bonus',
+        [{ field: 'overlayType', operator: RuleConditionOperator.EQUALS, value: 'BONUS' }],
+        [
+            {
+                type: RuleActionType.ACTIVATE_OVERLAY,
+                params: { type: OverlayType.INFO, text: '⏳ Ваш временный бонус сгорел.' }
+            }
+        ]
+    );
+
+    // U-2: Tripwire Expiration (Old TW-3)
+    await createRule(
+        'U-2-TW-EXPIRE',
         RuleTrigger.TIME,
         50,
         'Tripwire Expiration',
         [
             { field: 'overlay.TRIPWIRE', operator: RuleConditionOperator.EXISTS },
-            // "expired" is usually a state check or time check. 
-            // We represent "overlay(TRIPWIRE).expired" as a specific field check if our engine supports it.
-            // Or we rely on the engine passing expired items.
-            { field: 'overlay.TRIPWIRE.isExpired', operator: RuleConditionOperator.EQUALS, value: 'true' }
+            { field: 'overlay.TRIPWIRE.state', operator: RuleConditionOperator.EQUALS, value: 'EXPIRED' }
         ],
         [
             { type: RuleActionType.DEACTIVATE_OVERLAY, params: { type: OverlayType.TRIPWIRE } }
         ]
     );
 
-    // TW-4: Consume (Payment -> Deactivate)
+    // U-3: Tripwire Consume (Old TW-4)
     await createRule(
-        'TW-4',
+        'U-3-TW-CONSUME',
         RuleTrigger.PAYMENT_COMPLETED,
         100,
         'Tripwire Consumption',
@@ -113,44 +230,6 @@ async function main() {
             { type: RuleActionType.DEACTIVATE_OVERLAY, params: { type: OverlayType.TRIPWIRE } }
         ]
     );
-
-
-    console.log('--- 2. Bonus Rules ---');
-
-    // B-1: Grant Admin
-    await createRule(
-        'B-1',
-        RuleTrigger.ADMIN_EVENT, // Mapping ADMIN_BONUS_GRANTED to ADMIN_EVENT
-        100,
-        'Admin Bonus Grant',
-        [
-            // Usually implicit by event payload, but rules engine might filter
-            { field: 'event.subType', operator: RuleConditionOperator.EQUALS, value: 'BONUS_GRANT' }
-        ],
-        [
-            { type: RuleActionType.GRANT_BONUS, params: { source: 'admin' } } // Params usually come from event context
-        ]
-    );
-
-    // B-2: Streak (Skipping specific implementation detail as it needs external trigger STREAK_REACHED)
-    // Assuming generated event via custom trigger
-
-    // B-3: Burn First
-    await createRule(
-        'B-3',
-        RuleTrigger.GENERATION_REQUESTED,
-        100,
-        'Burn Bonus Credits First',
-        [
-            { field: 'bonusCredits', operator: RuleConditionOperator.GT, value: '0' }
-        ],
-        [
-            // Custom action or specific param
-            { type: RuleActionType.NO_ACTION, params: { strategy: 'burn_first' } }
-            // In reality, this might be hardcoded in service, but rule can flag it.
-        ]
-    );
-
 
     console.log('--- 3. Special Offer Rules ---');
 
@@ -169,34 +248,124 @@ async function main() {
         ]
     );
 
-    // SO-2: Show
+    console.log('--- 4. Referral Rules ---');
+
+    // R-1: Enable on Payment
     await createRule(
-        'SO-2',
-        RuleTrigger.OVERLAY_ACTIVATED,
-        50,
-        'Show Special Offer',
+        'R-1',
+        RuleTrigger.PAYMENT_COMPLETED,
+        100,
+        'Referral Activation',
         [
-            { field: 'overlay.type', operator: RuleConditionOperator.EQUALS, value: OverlayType.SPECIAL_OFFER }
+            { field: 'lifecycle', operator: RuleConditionOperator.EQUALS, value: 'PAID_ACTIVE', groupId: 1 },
+            { field: 'overlay.REFERRAL', operator: RuleConditionOperator.NOT_EXISTS, groupId: 1 }
         ],
         [
-            { type: RuleActionType.SEND_MESSAGE, params: { template: 'special_offer_msg' } }
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.REFERRAL } }
         ]
     );
 
-
-    console.log('--- 4. Referral Rules ---');
-
-    // R-1: Invite
+    // R-2: Invite
     await createRule(
-        'R-1',
+        'R-2',
         RuleTrigger.REFERRAL_INVITE,
         100,
-        'Referral Activation',
+        'Referral Invite Handler',
         [
             { field: 'overlay.REFERRAL', operator: RuleConditionOperator.NOT_EXISTS }
         ],
         [
             { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.REFERRAL } }
+        ]
+    );
+
+    // RET-1: Payment Failed
+    await createRule(
+        'RET-1',
+        RuleTrigger.PAYMENT_FAILED,
+        100,
+        'Payment Retry Nudge',
+        [
+            { field: 'overlay.PAYMENT_RETRY', operator: RuleConditionOperator.NOT_EXISTS }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.INFO, overlayCode: 'PAYMENT_RETRY' } }
+        ]
+    );
+
+    console.log('--- 5. Onboarding Rules ---');
+
+    // ONB-1: Start -> Offer
+    await createRule(
+        'ONB-1',
+        RuleTrigger.BOT_START,
+        200,
+        'Onboarding: Offer',
+        [
+            { field: 'overlay.ONBOARDING', operator: RuleConditionOperator.NOT_EXISTS }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING, step: 'OFFER' } }
+        ]
+    );
+
+    // ONB-2: Accepted -> Step 1
+    await createRule(
+        'ONB-2',
+        RuleTrigger.ADMIN_EVENT,
+        200,
+        'Onboarding: Step 1',
+        [
+            { field: 'event.subType', operator: RuleConditionOperator.EQUALS, value: 'ONBOARDING_START' }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING, step: 'STEP_1' } }
+        ]
+    );
+
+    // ONB-3: First Gen -> Step 2
+    await createRule(
+        'ONB-3',
+        RuleTrigger.GENERATION_COMPLETED,
+        200,
+        'Onboarding: Step 2',
+        [
+            { field: 'totalGenerations', operator: RuleConditionOperator.EQUALS, value: '1' },
+            { field: 'overlay.ONBOARDING', operator: RuleConditionOperator.EXISTS }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING, step: 'STEP_2' } }
+        ]
+    );
+
+    // ONB-4: Image Uploaded -> Step 3
+    await createRule(
+        'ONB-4',
+        RuleTrigger.GENERATION_REQUESTED,
+        200,
+        'Onboarding: Step 3',
+        [
+            { field: 'generation.type', operator: RuleConditionOperator.EQUALS, value: 'IMAGE_TO_IMAGE' },
+            { field: 'overlay.ONBOARDING', operator: RuleConditionOperator.EXISTS },
+            { field: 'overlay.ONBOARDING.metadata.step', operator: RuleConditionOperator.EQUALS, value: 'STEP_2' }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING, step: 'STEP_3' } }
+        ]
+    );
+
+    // ONB-5: Finish
+    await createRule(
+        'ONB-5',
+        RuleTrigger.GENERATION_COMPLETED,
+        200,
+        'Onboarding: Finish',
+        [
+            { field: 'overlay.ONBOARDING', operator: RuleConditionOperator.EXISTS },
+            { field: 'overlay.ONBOARDING.metadata.step', operator: RuleConditionOperator.EQUALS, value: 'STEP_3' }
+        ],
+        [
+            { type: RuleActionType.ACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING, step: 'COMPLETED' } }
         ]
     );
 }

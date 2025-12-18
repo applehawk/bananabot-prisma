@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RuleTrigger" ADD VALUE 'INSUFFICIENT_CREDITS';

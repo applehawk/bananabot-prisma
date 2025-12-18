@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -29,8 +28,8 @@ model User {
   dailyBonus        DailyBonus?
   isBlocked         Boolean       @default(false)
   isSubscribed      Boolean       @default(false)
-  retentionStage    Int           @default(0)
-  lastRetentionMessageAt DateTime?
+  isRuleEngineEnabled Boolean     @default(true) // For SELECTED_USERS_ONLY mode
+
   generations       Generation[]
   referralsReceived Referral[]    @relation("Referred")
   referralsGiven    Referral[]    @relation("Referrer")
@@ -70,6 +69,7 @@ model UserSettings {
   useNegativePrompt Boolean           @default(true)
   notifyOnComplete  Boolean           @default(true)
   notifyOnBonus     Boolean           @default(true)
+  timezone          String            @default("UTC") // [NEW] User Timezone
   askAspectRatio    Boolean           @default(false) // Option to ask for aspect ratio
   enhancementPrompt String?           @default("You are an expert at writing prompts for AI image generation.\nTake this user prompt and enhance it to create a detailed, high-quality image generation prompt.\nAdd details about style, lighting, composition, and quality while keeping the original intent.\nReturn ONLY the enhanced prompt, nothing else.")
   selectedModelId   String            @default("gemini-2.5-flash-image")
@@ -188,6 +188,12 @@ model SystemSettings {
   referralFirstPurchaseBonus Float @default(150) // Bonus for first purchase of referral
   defaultNewUserModelId String @default("gemini-2.5-flash-image") // Default model for new users
   tripwirePackageId String? // Package to offer when user runs out of credits
+
+  // Rule Engine Settings
+  ruleEngineEnabled Boolean @default(true)
+  ruleEngineMode    RuleEngineMode @default(ALL)
+  ruleEngineReferenceDate DateTime? // Date cutoff for NEW/OLD modes
+
   updatedAt       DateTime @updatedAt
 }
 
@@ -319,7 +325,7 @@ model CreditPackage {
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
   broadcasts    Broadcast[]
-  retentionStages RetentionStage[]
+
   
   @@index([active])
   @@index([popular])
@@ -515,49 +521,7 @@ model ChatMessage {
   @@index([mode])
 }
 
-model RetentionStage {
-  id           String             @id @default(cuid())
-  order        Int                @default(1)
-  name         String
-  message      String
-  
-  hoursSinceRegistration Int?
-  hoursSinceLastActivity Int?
-  hoursSinceLastStage    Int?
 
-  // Special Offer
-  isSpecialOffer  Boolean        @default(false)
-  creditPackageId String?
-  creditPackage   CreditPackage? @relation(fields: [creditPackageId], references: [id])
-  specialOfferLabel String?
-
-  // Random Generation Button
-  isRandomGenerationEnabled Boolean @default(false)
-  randomGenerationLabel     String?
-
-  // Conditions
-  conditionGenerations    Int?
-  conditionPaymentPresent Boolean?
-  
-  // Triggers
-  hoursSinceFirstPayment  Int?
-
-  // Active Hours
-  activeHoursStart        Int?
-  activeHoursEnd          Int?
-
-  buttons      Json?              // e.g. [{ text: 'Button', web_app: '...' }, { text: 'Key', callback_data: '...' }]
-  
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-
-  burnableBonusId        String?
-  burnableBonus          BurnableBonus? @relation(fields: [burnableBonusId], references: [id])
-
-  @@unique([order])
-  @@index([isActive])
-}
 
 model BurnableBonus {
   id                     String   @id @default(cuid())
@@ -570,7 +534,7 @@ model BurnableBonus {
   conditionTopUpAmount   Float?
 
   // Relations
-  retentionStages        RetentionStage[]
+
   broadcasts             Broadcast[]
   adminMessages          AdminMessage[]
 
@@ -684,13 +648,21 @@ enum FSMEvent {
 }
 
 enum FSMActionType {
+  // Allowed Infrastructure Actions
+  LOG_EVENT
+  TAG_USER
+  RESET_COUNTER
+  SYNC_ANALYTICS
+
+  // [DEPRECATED in FSM, Moved to Rules] 
+  // Kept for legacy compatibility / fallback
   SEND_MESSAGE
   SEND_SPECIAL_OFFER
   GRANT_BURNABLE_BONUS
   SHOW_TRIPWIRE
   ENABLE_REFERRAL
   SWITCH_MODEL_HINT
-  TAG_USER
+  
   NO_ACTION
 }
 
@@ -703,6 +675,7 @@ model FSMState {
 
   name        String   // Unique per version
   description String?
+  group       String?      @default("General")
   isInitial   Boolean  @default(false)
   isTerminal  Boolean  @default(false) // Stops evaluation
   
@@ -856,6 +829,8 @@ enum OverlayType {
   BONUS
   REFERRAL
   SPECIAL_OFFER
+  ONBOARDING
+  INFO
 }
 
 enum OverlayState {
@@ -863,6 +838,18 @@ enum OverlayState {
   ACTIVE
   EXPIRING
   EXPIRED
+  DISMISSED
+  CONVERTED
+}
+
+enum OverlayEventType {
+  REQUESTED
+  ACTIVATED
+  DELIVERED
+  CLICKED
+  CONVERTED
+  EXPIRED
+  DISMISSED
 }
 
 enum RuleTrigger {
@@ -876,18 +863,21 @@ enum RuleTrigger {
   ADMIN_EVENT
   OVERLAY_ACTIVATED
   OVERLAY_EXPIRED
+  STATE_CHANGED
   REFERRAL_INVITE
   REFERRAL_PAID
   STREAK_REACHED
+  INSUFFICIENT_CREDITS
+  CHANNEL_SUBSCRIPTION
 }
 
 enum RuleActionType {
   ACTIVATE_OVERLAY
   DEACTIVATE_OVERLAY
-  SEND_MESSAGE
-  SEND_SPECIAL_OFFER
-  GRANT_BONUS
-  NO_ACTION
+  EMIT_EVENT
+  TAG_USER
+  LOG_EVENT
+  NO_OP
 }
 
 enum RuleConditionOperator {
@@ -916,8 +906,77 @@ model UserOverlay {
 
   user          User           @relation(fields: [userId], references: [id])
 
+  // New Engine Relations
+  overlayId     String?
+  overlay       Overlay?       @relation(fields: [overlayId], references: [id])
+  variantId     String?
+  variant       OverlayVariant? @relation(fields: [variantId], references: [id])
+
+  scheduledFor  DateTime?      // For delayed delivery
+
   @@index([userId, type])
   @@index([state, expiresAt])
+}
+
+model Overlay {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  type        OverlayType
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  // Delivery Rules
+  ttlSeconds      Int?
+  cooldownSeconds Int?
+  maxImpressions  Int?
+
+  // Scheduling
+  defaultDelaySeconds Int?   // Delay before showing
+  allowedTimeWindow   String? // "09:00-21:00"
+
+  // Suppression
+  allowedLifecycleStates LifecycleState[]
+  blockedByTypes         OverlayType[]
+
+  payload     Json?    
+  variants    OverlayVariant[]
+  
+  // Relations
+  activations UserOverlay[]
+  events      OverlayEvent[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OverlayVariant {
+  id        String   @id @default(cuid())
+  overlayId String
+  overlay   Overlay  @relation(fields: [overlayId], references: [id], onDelete: Cascade)
+  
+  name      String
+  weight    Int      @default(0)
+  payload   Json     
+  isActive  Boolean  @default(true)
+
+  activations UserOverlay[]
+  events      OverlayEvent[]
+}
+
+model OverlayEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  overlayId   String
+  variantId   String?
+  
+  event       OverlayEventType 
+  sourceRule  String?          
+  
+  createdAt   DateTime @default(now())
+  metadata    Json?
+
+  overlay     Overlay @relation(fields: [overlayId], references: [id], onDelete: Cascade)
+  variant     OverlayVariant? @relation(fields: [variantId], references: [id])
 }
 
 model Rule {
@@ -927,6 +986,7 @@ model Rule {
   priority    Int          @default(0)
   trigger     RuleTrigger
   description String?
+  group       String?      @default("General")
 
   conditions  RuleCondition[]
   actions     RuleAction[]
@@ -958,4 +1018,13 @@ model RuleAction {
   rule      Rule            @relation(fields: [ruleId], references: [id])
 
   @@index([ruleId, order])
+}
+
+
+
+enum RuleEngineMode {
+  ALL
+  NEW_USERS_ONLY
+  OLD_USERS_ONLY
+  SELECTED_USERS_ONLY
 }

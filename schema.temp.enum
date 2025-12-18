@@ -1,0 +1,7 @@
+
+enum RuleEngineMode {
+  ALL
+  NEW_USERS_ONLY
+  OLD_USERS_ONLY
+  SELECTED_USERS_ONLY
+}
