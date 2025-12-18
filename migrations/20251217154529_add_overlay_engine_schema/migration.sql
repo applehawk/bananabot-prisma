@@ -35,6 +35,11 @@ ALTER TYPE "OverlayType" ADD VALUE 'INFO';
 -- AlterEnum
 BEGIN;
 CREATE TYPE "RuleActionType_new" AS ENUM ('ACTIVATE_OVERLAY', 'DEACTIVATE_OVERLAY', 'EMIT_EVENT', 'TAG_USER', 'LOG_EVENT', 'NO_OP');
+
+-- [FIX] Remove obsolete actions that are no longer supported in the new enum
+DELETE FROM "RuleAction" 
+WHERE "type"::text IN ('SEND_MESSAGE', 'GRANT_BONUS', 'SEND_SPECIAL_OFFER', 'NO_ACTION');
+
 ALTER TABLE "RuleAction" ALTER COLUMN "type" TYPE "RuleActionType_new" USING ("type"::text::"RuleActionType_new");
 ALTER TYPE "RuleActionType" RENAME TO "RuleActionType_old";
 ALTER TYPE "RuleActionType_new" RENAME TO "RuleActionType";

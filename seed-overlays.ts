@@ -51,7 +51,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "❌ Отмена", action: "DISMISS" }, // DISMISS action handled by processor as hide or callback?
+                { text: "❌ Отмена", action: "DISMISS", ui: { dismiss: 'delete' } },
                 { text: "🚀 Купить старт за {{price}}₽", url: "{{paymentUrl}}", action: "PAY" },
             ]
         },
@@ -73,7 +73,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "🔥 Потратить сейчас", action: "menu_main" }
+                { text: "🔥 Потратить сейчас", action: "menu_main", ui: { dismiss: 'delete' } }
             ]
         },
         { ttl: 21600 } // 6h default
@@ -114,8 +114,8 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "✅ Да, хочу научиться!", action: "onboarding_start" },
-                { text: "Нет, я уже умею", action: "onboarding_skip" }
+                { text: "✅ Да, хочу научиться!", action: "onboarding_start", ui: { dismiss: 'delete' } },
+                { text: "Нет, я уже умею", action: "onboarding_skip", ui: { dismiss: 'edit', text: '<b>Обучение пропущено.</b>\n\nПриятного пользования!' } }
             ]
         }
     );
@@ -132,7 +132,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "❌ Закончить обучение", action: "onboarding_skip" }
+                { text: "❌ Закончить обучение", action: "onboarding_skip", ui: { dismiss: 'delete' } }
             ]
         }
     );
@@ -149,7 +149,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "❌ Закончить обучение", action: "onboarding_skip" }
+                { text: "❌ Закончить обучение", action: "onboarding_skip", ui: { dismiss: 'delete' } }
             ]
         }
     );
@@ -166,7 +166,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "❌ Закончить обучение", action: "onboarding_skip" }
+                { text: "❌ Закончить обучение", action: "onboarding_skip", ui: { dismiss: 'delete' } }
             ]
         }
     );
@@ -183,7 +183,7 @@ async function main() {
                 parseMode: "HTML"
             },
             buttons: [
-                { text: "🚀 Начать творить", action: "menu_main" }
+                { text: "🚀 Начать творить", action: "menu_main", ui: { dismiss: 'delete' } }
             ]
         }
     );

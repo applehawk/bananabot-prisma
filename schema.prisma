@@ -869,6 +869,7 @@ enum RuleTrigger {
   STREAK_REACHED
   INSUFFICIENT_CREDITS
   CHANNEL_SUBSCRIPTION
+  UI_EVENT
 }
 
 enum RuleActionType {
@@ -979,6 +980,16 @@ model OverlayEvent {
   variant     OverlayVariant? @relation(fields: [variantId], references: [id])
 }
 
+model RuleGroup {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  rules     Rule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Rule {
   id          String       @id @default(cuid())
   code        String       @unique
@@ -986,7 +997,11 @@ model Rule {
   priority    Int          @default(0)
   trigger     RuleTrigger
   description String?
-  group       String?      @default("General")
+  
+  // Relations
+  groupId     String?      
+  group       RuleGroup?   @relation(fields: [groupId], references: [id])
+
 
   conditions  RuleCondition[]
   actions     RuleAction[]

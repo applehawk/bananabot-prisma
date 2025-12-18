@@ -13,20 +13,36 @@ async function main() {
     await prisma.ruleAction.deleteMany({});
     await prisma.ruleCondition.deleteMany({});
     await prisma.rule.deleteMany({});
+    await prisma.ruleGroup.deleteMany({}); // Cleanup groups
+
+    // 2. Create Groups
+    const groups: Record<string, string> = {};
+    const groupNames = ['Lifecycle', 'Business', 'Special Offers', 'Referral', 'Onboarding', 'General'];
+
+    for (const name of groupNames) {
+        const group = await prisma.ruleGroup.create({
+            data: { name, order: groupNames.indexOf(name) }
+        });
+        groups[name] = group.id;
+        console.log(`✅ Group Created: ${name}`);
+    }
 
     // Helper
     const createRule = async (
         code: string,
+        groupName: string,
         trigger: RuleTrigger,
         priority: number,
         description: string,
         conditions: { field: string, operator: RuleConditionOperator, value?: string, groupId?: number }[],
         actions: { type: RuleActionType, params?: any, order?: number }[]
     ) => {
+        const groupId = groups[groupName] || groups['General'];
         await prisma.rule.create({
             data: {
                 code,
                 trigger,
+                groupId, // Link by ID
                 priority,
                 description,
                 conditions: {
@@ -54,6 +70,7 @@ async function main() {
     // LC-1: Welcome on Active (Bonus)
     await createRule(
         'LC-1-WELCOME',
+        'Lifecycle',
         RuleTrigger.STATE_CHANGED,
         100,
         'Welcome Bonus on Active',
@@ -76,6 +93,7 @@ async function main() {
     // Replaces old TW-1/TW-1-GEN with robust FSM state check
     await createRule(
         'LC-2-TRIPWIRE',
+        'Lifecycle',
         RuleTrigger.STATE_CHANGED,
         200, // High priority
         'Paywall Tripwire Activation',
@@ -94,6 +112,7 @@ async function main() {
     // LC-3: Thank You Purchase
     await createRule(
         'LC-3-THANK',
+        'Lifecycle',
         RuleTrigger.STATE_CHANGED,
         100,
         'Thank You for Purchase',
@@ -111,6 +130,7 @@ async function main() {
     // LC-4: Inactivity Nudge
     await createRule(
         'LC-4-INACTIVE',
+        'Lifecycle',
         RuleTrigger.STATE_CHANGED,
         100,
         'Inactivity Nudge',
@@ -128,6 +148,7 @@ async function main() {
     // LC-5: Resurrection
     await createRule(
         'LC-5-RESURRECT',
+        'Lifecycle',
         RuleTrigger.STATE_CHANGED,
         100,
         'Resurrection Welcome',
@@ -149,6 +170,7 @@ async function main() {
     // B-1: Milestone 10 Gens
     await createRule(
         'B-1-10GENS',
+        'Business',
         RuleTrigger.GENERATION_COMPLETED,
         100,
         'Achievement: 10 Generations',
@@ -168,6 +190,7 @@ async function main() {
     // B-2: Milestone 50 Gens (Existing B-1)
     await createRule(
         'B-2-50GENS',
+        'Business',
         RuleTrigger.GENERATION_COMPLETED,
         100,
         'Milestone Bonus (50 gens)',
@@ -190,6 +213,7 @@ async function main() {
     // U-1: Expired Bonus Notification
     await createRule(
         'U-1-EXPIRED',
+        'Business',
         RuleTrigger.OVERLAY_EXPIRED,
         50,
         'Notify Expired Bonus',
@@ -205,6 +229,7 @@ async function main() {
     // U-2: Tripwire Expiration (Old TW-3)
     await createRule(
         'U-2-TW-EXPIRE',
+        'Business',
         RuleTrigger.TIME,
         50,
         'Tripwire Expiration',
@@ -220,6 +245,7 @@ async function main() {
     // U-3: Tripwire Consume (Old TW-4)
     await createRule(
         'U-3-TW-CONSUME',
+        'Business',
         RuleTrigger.PAYMENT_COMPLETED,
         100,
         'Tripwire Consumption',
@@ -236,6 +262,7 @@ async function main() {
     // SO-1: Admin Push
     await createRule(
         'SO-1',
+        'Special Offers',
         RuleTrigger.ADMIN_EVENT,
         50,
         'Admin Push Offer',
@@ -253,6 +280,7 @@ async function main() {
     // R-1: Enable on Payment
     await createRule(
         'R-1',
+        'Referral',
         RuleTrigger.PAYMENT_COMPLETED,
         100,
         'Referral Activation',
@@ -268,6 +296,7 @@ async function main() {
     // R-2: Invite
     await createRule(
         'R-2',
+        'Referral',
         RuleTrigger.REFERRAL_INVITE,
         100,
         'Referral Invite Handler',
@@ -282,6 +311,7 @@ async function main() {
     // RET-1: Payment Failed
     await createRule(
         'RET-1',
+        'Referral', // Or "Payment"
         RuleTrigger.PAYMENT_FAILED,
         100,
         'Payment Retry Nudge',
@@ -298,6 +328,7 @@ async function main() {
     // ONB-1: Start -> Offer
     await createRule(
         'ONB-1',
+        'Onboarding',
         RuleTrigger.BOT_START,
         200,
         'Onboarding: Offer',
@@ -312,7 +343,8 @@ async function main() {
     // ONB-2: Accepted -> Step 1
     await createRule(
         'ONB-2',
-        RuleTrigger.ADMIN_EVENT,
+        'Onboarding',
+        RuleTrigger.UI_EVENT,
         200,
         'Onboarding: Step 1',
         [
@@ -323,9 +355,26 @@ async function main() {
         ]
     );
 
+    // ONB-SKIP: Skip Onboarding
+    await createRule(
+        'ONB-SKIP',
+        'Onboarding',
+        RuleTrigger.UI_EVENT,
+        300,
+        'Onboarding: Skip',
+        [
+            { field: 'event.subType', operator: RuleConditionOperator.EQUALS, value: 'ONBOARDING_SKIP' },
+            { field: 'overlay.ONBOARDING', operator: RuleConditionOperator.EXISTS }
+        ],
+        [
+            { type: RuleActionType.DEACTIVATE_OVERLAY, params: { type: OverlayType.ONBOARDING } }
+        ]
+    );
+
     // ONB-3: First Gen -> Step 2
     await createRule(
         'ONB-3',
+        'Onboarding',
         RuleTrigger.GENERATION_COMPLETED,
         200,
         'Onboarding: Step 2',
@@ -341,6 +390,7 @@ async function main() {
     // ONB-4: Image Uploaded -> Step 3
     await createRule(
         'ONB-4',
+        'Onboarding',
         RuleTrigger.GENERATION_REQUESTED,
         200,
         'Onboarding: Step 3',
@@ -357,6 +407,7 @@ async function main() {
     // ONB-5: Finish
     await createRule(
         'ONB-5',
+        'Onboarding',
         RuleTrigger.GENERATION_COMPLETED,
         200,
         'Onboarding: Finish',
